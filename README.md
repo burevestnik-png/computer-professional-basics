@@ -1,3 +1,5 @@
-# CPB
+# Лабораторные по ОПД
 
-This repository contains laboratory works on the computer professional basics, performed by a student of ITMO group P3113 from 1 course Kulinich Yaroslav
+Здесь находятся все лабы, связанные с ОПД. 
+
+Также вы можете обратиться к [моей группе](https://vk.com/yofik_inc) где есть мануалы к сдаче 4, 5, 6 лабы.
