@@ -1,0 +1,274 @@
+﻿	ORG 0x0	; Блок инициализации векторов прерывания
+VECTOR_0:	WORD $DEF_HAND, 0x180
+VECTOR_1:	WORD $DEF_HAND, 0x180
+VECTOR_2:	WORD $INT2, 0x180
+VECTOR_3:	WORD $INT3, 0x180
+VECTOR_4:	WORD $DEF_HAND, 0x180
+VECTOR_5:	WORD $DEF_HAND, 0x180
+VECTOR_6:	WORD $DEF_HAND, 0x180
+VECTOR_7:	WORD $DEF_HAND, 0x180
+DEF_HAND:	PUSH	; Дефолтный обработчик прерываний для ВУ-1 и ВУ-4 10
+ED1_HAND:	IN 3
+	AND #0x40
+	BEQ ED4_HAND
+	CLA
+	OUT 2
+
+ED4_HAND: IN 0xA
+	AND #0x40
+	BEQ END_HAND
+	IN 9
+
+END_HAND:	POP
+	IRET	; 1B
+
+	ORG 0x1D	; Блок инициализации начального, макс. и мин. значений X
+X:	WORD 0x20
+MIN_X:	WORD 0xFFD6
+MAX_X:	WORD 0x2A
+
+START:	DI	; Начало программы 20
+
+INIT_MR:	; Блок привязывания MR всех КВУ к векторам прерывания
+	LD #8
+	OUT 3
+	
+	LD #0xA
+	OUT 5
+	
+	CLA
+	OUT 6
+	
+	LD #0xB 
+	OUT 7
+	
+	LD #9
+	OUT 0xB	; 2B
+	
+EXEC:	EI	; Начало основного цикла 2C
+	NOP	;
+
+OPER:	DI	; Блок операции увеличения X на 2 и сохранения результата по адресу 0x1D
+	LD X	; если X превысит MAX_X, то X будет присвоено MIN_X
+	ADD #0x2
+	CMP MAX_X
+	
+	ST TMP_X_MID	; Сохранение промежуточных X и PS
+	PUSHF
+	LD &0
+	ST TMP_PS_MID
+	LD TMP_X_MID
+	POPF
+	
+	BLT SAVE_X
+	BEQ SAVE_X
+	LD MIN_X
+	
+SAVE_X:	ST X
+	PUSHF
+	LD &0
+	ST TMP_PS
+	POPF	; 3F
+	
+	LD MAIN_LEN	; Блок сохранения промежуточных и конечных X и PS в таблицу с данными 
+	BEQ NEXT
+	
+	LD TMP_X_MID	; Сохранение промежуточного X
+	ST (MAIN_CUR)+
+	
+	LD TMP_PS_MID	; Сохранение промежуточного содержимого PS
+	ST (MAIN_CUR)+
+	
+	LD X
+	ST (MAIN_CUR)+	; Сохранение конечного X
+	
+	LD TMP_PS
+	ST (MAIN_CUR)+	; Сохранение конечного содержимого PS
+	
+	LOOP MAIN_LEN	
+	JUMP NEXT
+	HLT	; БРЕЙКПОИНТ, для оставки после заполнения всей отладочной таблицы
+	
+NEXT:	EI
+	NOP	; БРЕЙКПОИНТ
+	JUMP OPER	; Зацикливание увеличения X на 2
+	
+TMP_X_MID:	WORD 0	; 50
+TMP_PS_MID: WORD 0
+TMP_PS:	WORD 0
+	
+INT2:	PUSH	; Блок обработчика прерывания ВУ-2
+	LD X	; Осуществляет операцию побитого И содержимого 
+	PUSH	; РДВУ-2 и X, а результат присвает X
+	
+	IN 0x4	
+	PUSH	; 50
+	AND X	
+	ST X
+	
+	CLA
+	IN 5
+	PUSH
+	
+	PUSHF
+	
+	LD INT2_LEN	; Сохранение отладочной информации
+	BEQ NEXT_INT2
+	
+	LD &3
+	ST (INT2_CUR)+	; Сохранение начального X
+	
+	LD &2
+	ST (INT2_CUR)+	; Сохранение пользовательского ввода в РДВУ-2
+	
+	LD X
+	ST (INT2_CUR)+	; Сохранение нового значения X
+	
+	LD &0
+	ST (INT2_CUR)+	; Сохранение содержимого PS
+	
+	LD &1
+	ST (INT2_CUR)+	; Сохранение содержимого РСВУ-2
+	
+	OR -(INT2_LEN)	
+	
+NEXT_INT2:	POPF
+	POP
+	POP
+	POP
+	POP
+	IRET	; 70
+	
+INT3:	PUSH ; Блок обработчика прерывания ВУ-3
+	LD X	; Осуществляет подсчет функции F(X)=3X-1
+	PUSH	; И выводит в РДВУ-3
+	ASL
+	ADD X
+	DEC
+	OUT 0x6
+	PUSH
+	
+	CLA
+	IN 7
+	PUSH
+	
+	PUSHF
+	
+	LD INT3_LEN	; Сохранение отладочной информации
+	BEQ NEXT_INT3
+	
+	LD &3
+	ST (INT3_CUR)+	; Сохранение переменной X
+	
+	LD &2
+	ST (INT3_CUR)+	; Сохранение результата вычисления F(X)
+	
+	LD &0
+	ST (INT3_CUR)+	; Сохранение содержимого PS
+	
+	LD &1
+	ST (INT3_CUR)+	; Сохранение содержимого РСВУ-3
+	
+	OR -(INT3_LEN)
+	
+NEXT_INT3:	POPF
+	POP
+	POP
+	POP
+	POP
+	IRET ; 8D
+	
+	ORG 0x90
+MAIN_CUR:	WORD $MSTEP_1_X_MID	; Указывает текущий адрес свободной отладочной ячейки для основного цикла программы
+MAIN_LEN:	WORD 10	; Указывает количество сохранений в отладочную таблицу
+MSTEP_1_X_MID: WORD 0; Начало блока отладочных ячеек для основного цикла программы
+MSTEP_1_PS_MID: WORD 0
+MSTEP_1_X: WORD 0
+MSTEP_1_PS: WORD 0
+MSTEP_2_X_MID: WORD 0
+MSTEP_2_PS_MID: WORD 0
+MSTEP_2_X: WORD 0
+MSTEP_2_PS: WORD 0
+MSTEP_3_X_MID: WORD 0
+MSTEP_3_PS_MID: WORD 0
+MSTEP_3_X: WORD 0
+MSTEP_3_PS: WORD 0
+MSTEP_4_X_MID: WORD 0
+MSTEP_4_PS_MID: WORD 0
+MSTEP_4_X: WORD 0
+MSTEP_4_PS: WORD 0
+MSTEP_5_X_MID: WORD 0
+MSTEP_5_PS_MID: WORD 0
+MSTEP_5_X: WORD 0
+MSTEP_5_PS: WORD 0
+MSTEP_6_X_MID: WORD 0
+MSTEP_6_PS_MID: WORD 0
+MSTEP_6_X: WORD 0
+MSTEP_6_PS: WORD 0
+MSTEP_7_X_MID: WORD 0
+MSTEP_7_PS_MID: WORD 0
+MSTEP_7_X: WORD 0
+MSTEP_7_PS: WORD 0
+MSTEP_8_X_MID: WORD 0
+MSTEP_8_PS_MID: WORD 0
+MSTEP_8_X: WORD 0
+MSTEP_8_PS: WORD 0
+MSTEP_9_X_MID: WORD 0
+MSTEP_9_PS_MID: WORD 0
+MSTEP_9_X: WORD 0
+MSTEP_9_PS: WORD 0
+MSTEP_10_X_MID: WORD 0
+MSTEP_10_PS_MID: WORD 0
+MSTEP_10_X: WORD 0;
+MSTEP_10_PS: WORD 0; Конец блока отладочных ячеек для основного цикла программы 
+
+INT2_CUR: WORD $INT2STEP_1_X_OLD; Начало блока отладочных ячеек для обработчика прерываний ВУ-2
+INT2_LEN: WORD 5
+INT2STEP_1_X_OLD: WORD 0
+INT2STEP_1_SX: WORD 0
+INT2STEP_1_X_NEW: WORD 0
+INT2STEP_1_PS: WORD 0
+INT2STEP_1_SR: WORD 0
+INT2STEP_2_X_OLD: WORD 0
+INT2STEP_2_SX: WORD 0
+INT2STEP_2_X_NEW: WORD 0
+INT2STEP_2_PS: WORD 0
+INT2STEP_2_SR: WORD 0
+INT2STEP_3_X_OLD: WORD 0
+INT2STEP_3_SX: WORD 0
+INT2STEP_3_X_NEW: WORD 0
+INT2STEP_3_PS: WORD 0
+INT2STEP_3_SR: WORD 0
+INT2STEP_4_X_OLD: WORD 0
+INT2STEP_4_SX: WORD 0
+INT2STEP_4_X_NEW: WORD 0
+INT2STEP_4_PS: WORD 0
+INT2STEP_4_SR: WORD 0
+INT2STEP_5_X_OLD: WORD 0
+INT2STEP_5_SX: WORD 0
+INT2STEP_5_X_NEW: WORD 0
+INT2STEP_5_PS: WORD 0
+INT2STEP_5_SR: WORD 0; Конец блока отладочных ячеек для обработчика прерываний ВУ-2
+
+INT3_CUR: WORD $INT3STEP_1_X; Начало блока отладочных ячеек для обработчика прерываний ВУ-3
+INT3_LEN: WORD 5
+INT3STEP_1_X: WORD 0
+INT3STEP_1_SX: WORD 0
+INT3STEP_1_PS: WORD 0
+INT3STEP_1_SR: WORD 0
+INT3STEP_2_X: WORD 0
+INT3STEP_2_SX: WORD 0
+INT3STEP_2_PS: WORD 0
+INT3STEP_2_SR: WORD 0
+INT3STEP_3_X: WORD 0
+INT3STEP_3_SX: WORD 0
+INT3STEP_3_PS: WORD 0
+INT3STEP_3_SR: WORD 0
+INT3STEP_4_X: WORD 0
+INT3STEP_4_SX: WORD 0
+INT3STEP_4_PS: WORD 0
+INT3STEP_4_SR: WORD 0
+INT3STEP_5_X: WORD 0
+INT3STEP_5_SX: WORD 0
+INT3STEP_5_PS: WORD 0
+INT3STEP_5_SR: WORD 0; Конец блока отладочных ячеек для обработчика прерываний ВУ-3
